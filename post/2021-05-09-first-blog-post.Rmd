@@ -1,0 +1,56 @@
+---
+title: First blog post!
+author: Addison Xu
+date: '2021-05-09'
+slug: first-blog-post
+categories: []
+tags: []
+description: ''
+---
+
+This is my first blog post on the website! I'm going to show a few of the python basics that I learned including having R and Python  talk to each other with reticulate.
+
+![](/post/2021-05-09-first-blog-post_files/project3image.jpg)
+*When I finally figured out how to insert this meme.
+
+## Built-in Functions
+
+```{python}
+print("hello world")
+x = list(range(2,9,2))
+len(x)
+max(x)
+min(x)
+type(x)
+```
+
+## Slicing Practice
+```{python}
+plist=list(range(19))
+plist
+plist[4:6]
+plist[::3]
+```
+
+## Indexing
+```{python}
+list1=[2,1,19]
+list2=['a','d','d','y']
+list2[1]
+list1[2]
+```
+
+## Reticulate
+```{R}
+library(reticulate)
+Addy <- "Hello"
+```
+
+```{python}
+Addy = "World"
+print(r.Addy,Addy)
+```
+
+```{R}
+cat(c(Addy,py$Addy))
+```

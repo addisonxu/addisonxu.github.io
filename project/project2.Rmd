@@ -1,0 +1,240 @@
+---
+title: "Project 2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 0. Introduction
+
+*My data is my merged data set from Project 1, which looks at my biking analytics from Texas 4000. There are 50 observations measuring 8 variables, which are date, time, pace, miles, rider, weather, rain (whether rain was present or not), low temperature, and high temperature.*
+
+## 1. MANOVA Test
+
+```{R}
+library(tidyverse)
+library(fivethirtyeight)
+read.csv("Project2.csv")
+Project2 <- read.csv("Project2.csv")
+print(Project2)
+T4K <- data.frame(Project2)
+man <- manova(cbind(Pace,Miles)~Weather, data=T4K)
+summary(man)
+```
+
+*A MANOVA test was ran with the numeric variables being pace and miles and the categorical variable being weather. The p-value was 0.177, which is not significant. Univariate ANOVA tests were not run because there were not significant differences observed. The MANOVA assumptions were not met as the first assumption pertaining to random samples is violated.*
+
+## 2. Randomization Test
+
+```{R}
+table(Project2$Weather)
+X2<-vector()
+for(i in 1:10000){
+samp<-sample(factor(c("Partly Cloudy","Sunny","Cloudy", "Windy", "Rainy")),50,replace=T)
+obs<-table(samp)
+exp<-c(21,9,6,3,11)
+X2[i]<-sum((obs-exp)^2/exp)
+}
+quantile(X2,.95)
+qchisq(.95, df=4)
+curve(dchisq(x, df = 4), from = 0, to = 15, col = 'blue', xlab = "x^2", ylab = "Density") #plot null and test 
+
+```
+
+*Ho: The observed proportions match theoretical proportions for weather.*
+*Ha: The observed proportions do not match theoretical proportions for weather.*
+*The value for the simulated chi-squared cuts of 5% above is 59.818, and this does not match what's in the chi-squared table. This means that the null hypothesis is rejected as the observed proportions don't match the theoretical ones. *
+
+## 3. Linear Regression Model
+
+```{R}
+options(repos=structure(c(CRAN="YOUR FAVORITE MIRROR")))
+pace <- Project2$Pace - mean(Project2$Pace)
+high <- Project2$High - mean(Project2$High)
+fit <- lm(Pace ~ Miles*High, data = Project2)
+summary(fit)
+
+coef(fit)
+
+library(ggplot2)
+library(dplyr)
+Project2%>%ggplot(aes(Pace, High)) + geom_point() + geom_smooth(method = 'lm', se = F)
+
+cor(Project2$Pace, Project2$High)
+
+residual <- fit$residuals
+fit1 <- fit$fitted.values
+ggplot() + geom_point(aes(fit1,residual)) + geom_hline(yintercept = 0, color = 'blue')
+ggplot() + geom_histogram(aes(residual))
+ggplot() + geom_qq(aes(sample=residual)) + geom_qq()
+
+library(lmtest)
+library(zoo)
+install.packages("zoo")
+coeftest(fit)[,1:2]
+#coeftest(fit, vcov=vcovHC(fit))[,1:2]
+
+fit2 <- lm(High~Pace, data = Project2)
+SST <- sum((Project2$High-mean(Project2$High))^2)
+SSR <- sum((fit2$fitted.values-mean(Project2$High)))
+SSE <- sum(fit2$residuals^2)
+(SSR/SST)*100
+```
+
+*The coefficient was positive but weak indicating that there's a weak relationship between pace and the high temperature. Plots were made to show the interaction between the two variables, and numeric variables were mean centered as necessary. The model explains 7.94 e-17% of the variation outcome. For the assumptions, homoskedasticity was slightly violated, and normality and linearity were violated. Robust standard errors were computed, and their values were slightly higher than the non-robust standard errors. *
+
+## 4. Linear Regression Model - Bootstrap
+
+```{R}
+samp_distn <- replicate(5000, {
+boot_dat <- Project2[sample(nrow(Project2),replace=TRUE),]
+fit3 <- lm(High ~ Miles*Pace, data=boot_dat)
+coef(fit3)
+})
+samp_distn%>%t%>%as.data.frame%>%summarize_all(sd)
+```
+
+*The bootstrap standard error is the highest then robust then non-robust. The p-value is also bigger for bootstrap compared to the robust and non-robust values. *
+
+## 5. Logistic Regression Model
+
+```{R}
+library(tidyverse)
+library(lmtest)
+library(plotROC)
+data <- Project2%>%mutate(y=ifelse(Rain=="Yes",1,0))
+head(data)
+fit4 <- glm(y~Pace, data=data, family=binomial(link="logit"))
+coeftest(fit4)
+exp(coef(fit4))
+logistic <- function(x){exp(x)/(1+exp(s))}
+table(truth=data$Rain, prediction=data$Pace>12.1)%>%addmargins
+(18+6)/50
+18/39
+6/11
+18/24
+
+widths<-diff(data$y)
+heights<-vector()
+for(i in 1:100) heights[i]<-data$y[i]+data$y[i+1]
+AUC<-sum(heights*widths/2)
+AUC%>%round(3)
+
+Project2$logit <- predict(fit4, type = "link")
+Project2%>%ggplot()+geom_density(aes(logit,color=Rain, fill=Rain),alpha=0.4)+theme(legend.position = c(0.3,0.6))+geom_vline(xintercept = 2)+xlab("logit(log-odds")+geom_rug(aes(logit,color=Rain))
+
+library(plotROC)
+ROCplot <- ggplot(data)+geom_roc(aes(d=y,m=Pace, n.cuts=0))
+ROCplot
+calc_auc(ROCplot)
+```
+
+*The estimate for the coefficient intercept is -8.232, and when pace increases, the odds are multiplied by a factor of 4.714e-4. The confusion matrix was used to calculate the accuracy (0.48), sensitivity (0.46), specificity (0.54), and precision (0.75). The AUC value is NA meaning there's no area under the curve. The density plot was used to observe accuracy, sensitivity, specificity, and precision. Additionally, an ROC plot was made, and the AUC value calculated was 0.646. *
+
+## 6. Logistic Regression Model (II)
+
+```{r error=TRUE}
+library(tidyverse)
+library(lmtest)
+library(pROC)
+library(glmnet)
+
+class_diag<-function(probs,truth){
+  tab<-table(factor(probs>.5,levels=c("FALSE","TRUE")),truth)
+  acc=sum(diag(tab))/sum(tab)
+  sens=tab[2,2]/colSums(tab)[2]
+  spec=tab[1,1]/colSums(tab)[1]
+  ppv=tab[2,2]/rowSums(tab)[2]
+
+  if(is.numeric(truth)==FALSE & is.logical(truth)==FALSE) truth<-as.numeric(truth)-1 
+  ord<-order(probs, decreasing=TRUE)
+  probs <- probs[ord]; truth <- truth[ord]
+  
+  TPR=cumsum(truth)/max(1,sum(truth)) 
+  FPR=cumsum(!truth)/max(1,sum(!truth))
+  
+  dup<-c(probs[-1]>=probs[-length(probs)], FALSE)
+  TPR<-c(0,TPR[!dup],1); FPR<-c(0,FPR[!dup],1)
+  
+  n <- length(TPR)
+  auc<- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+
+  data.frame(acc,sens,spec,ppv,auc)
+}
+
+k=10
+data1 <- data[sample(nrow(data)),]
+folds <- cut(seq(1:nrow(data)),breaks=k,labels=F)
+diags <- NULL 
+
+#this is where my code stops running
+for(i in 1:k){
+  train <- data1[folds!=i,]   
+  test <- data1[folds==i,]
+  truth <- test$y
+  fit5 <- glm(y~Pace, data = data,family="binomial")
+  probs <- predict(fit5, newdata = test,type="response")
+  diags <- rbind(diags,class_diag(probs,truth) } #this specific line keeps giving me errors on each part that involves a 10-fold CV
+summarize_all(diags,mean)
+
+k=10
+data <- Project2 %>% sample_frac
+data$binary<-ifelse(data$Rain=="Yes",1,0)
+folds <- ntile(1:nrow(data),n=10) 
+diags<-NULL
+
+#same thing here because same code
+for(i in 1:k){
+train <- data[folds!=i,] 
+test <- data[folds==i,] 
+truth <- test$binary 
+fit <- glm(binary~Time+Pace+Miles+Rider+Weather+Rain+Low+High,
+data=train, family="binomial")
+probs <- predict(fit, newdata=test, type="response")
+diags<-rbind(diags,class_diag(probs,truth)) #this specific line keeps giving me errors on each part that involves a 10-fold CV
+}
+diags%>%summarize_all(mean)
+
+data$binary<-ifelse(data$Rain=="Yes",1,0)
+y<-as.matrix(data$binary)
+x<-model.matrix(binary~Time+Pace+Miles+Rider+Weather+Rain+Low+High,data=data)[,-1]
+head(x)
+x<-scale(x)
+head(x)
+cv<-cv.glmnet(x,y,family="binomial")
+lasso<-glmnet(x,y,family="binomial",lambda=cv$lambda.1se)
+coef(lasso)
+
+k=10
+data <- Project2 %>% sample_frac 
+folds <- ntile(1:nrow(data),n=10) 
+data$binary<-ifelse(data$Rain=="Yes",1,0)
+diags<-NULL
+
+#same thing here because same code
+for(i in 1:k){
+train <- data[folds!=i,] 
+test <- data[folds==i,] 
+truth <- test$binary 
+fit <- glm(binary~Time+High,
+data=train, family="binomial")
+probs <- predict(fit, newdata=test, type="response")
+diags<-rbind(diags,class_diag(probs,truth)) #this specific line keeps giving me errors on each part that involves a 10-fold CV
+}
+diags%>%summarize_all(mean) #this line will sometimes give output
+```
+
+*For the fit model, the accuracy is _ , the sensitivity is _, the specificity is _, the precision is _, and the AUC value is _.*
+*For the 10-fold, the accuracy is 1 , the sensitivity is 1, the specificity is 1, the precision is 1, and the AUC value is 1.*
+*When LASSO was performed, the variables retained were time and high temperature. The accuracy is 0.667 , the sensitivity is 0, the specificity is 1, the precision is NaN, and the AUC value is 0.305.*
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,132 @@
+---
+title: "Real Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", 
+    warning = F, message = F, tidy = TRUE, tidy.opts = list(width.cutoff = 60), 
+    R.options = list(max.print = 100))
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(tidyverse)
+library(Hmisc)
+RMS <- read.csv("RMS.csv", 
+                  header = TRUE, 
+                   quote="\"", 
+                  stringsAsFactors= TRUE, 
+                 strip.white = TRUE)
+
+Weather <- read.csv("Weather.csv", 
+                         header = TRUE, 
+                         quote="\"", 
+                         stringsAsFactors= TRUE, 
+                         strip.white = TRUE)
+
+```
+
+## 0. Introduction
+
+I'm apart of Texas 4000 and will be biking 4,500 miles this summer in the fight against cancer! We record our rides onto this website, which was actually made by a Texas 4000 alum, which is cool. My first data set includes the date, rider, time, pace, and miles ridden. I had to get data from a couple friends since I didn't have 50 rides by myself. The second data set includes the common variable, which is the date, as well as the low temperature, high temperature, and weather type for that day. I wanted to see if the weather had any impact on my biking data and expect the weather to impact the pace and time more than miles. 
+
+## 1. Tidying: Rearranging Wide/Long
+
+```{R}
+library(tidyr)
+RMS %>% pivot_wider(names_from="Rider", values_from="Miles")
+Wider <- RMS %>% pivot_wider(names_from="Rider", values_from="Miles")
+Wider %>% pivot_longer(c("Addison","Aashna", "Alex"), names_to="Rider", values_to="Miles") %>% na.omit(DT)
+Weather %>% pivot_wider(names_from = "Weather", values_from = "High")
+WiderWeather <- Weather %>% pivot_wider(names_from = "Weather", values_from = "High")
+WiderWeather %>% pivot_longer(c("Partly Cloudy","Sunny", "Cloudy", "Windy", "Rainy"), names_to="Weather.Type", values_to="High") %>% na.omit(DT)
+```
+
+My data was already pretty tidy since I made them myself, which was a tedious process, but it did make the overall project easier. Using pivot wider, I expanded the first data set to separate out each rider's bike data because even though we do bike the same routes, there are little differences between each rider. I then used pivot longer to restore it back to the original data. For the second data set, I expanded the specific weather types with their high temperatures for the day to see if there was any relation there. I noticed there were more partly cloudy days, and that temperatures tended to be higher when sunny and lower when windy. I then used the pivot longer function again to restore it back to the original data. 
+
+## 2. Joining/Merging
+
+```{R}
+RMS%>%left_join(Weather)
+Combined <- RMS%>%left_join(Weather)
+```
+
+I joined the two data sets together based on the common categorical variable, date. I decided to do left join because I wanted the merge to return all of the rows from the left side. 
+
+## 3. Wrangling
+
+```{R}
+Combined%>%filter(Weather == "Sunny")
+Combined%>%arrange(desc(Miles))
+Combined%>%select(Date, Miles, Rider, Weather)
+Combined%>%group_by(Pace, Miles)
+zscore <- function(x) (x-mean(x,na.rm=T)) / sd(x,na.rm=T)
+Combined%>%mutate_at(c("Miles"), list(z=zscore))
+Combined%>%summarize_all(n_distinct)
+
+median(Combined$Miles)
+mean(Combined$Pace[Combined$Miles>32.245])
+sd(Combined$Low[Combined$Miles<32.245])
+quantile(Combined$Pace)
+min(Combined$Miles[Combined$Pace>12.650])
+
+Groupbyweather <- group_by(Combined, Weather)
+summarise(Groupbyweather, Pace = mean(Pace, na.rm = TRUE))
+Groupbyrider <- group_by(Combined, Rider)
+summarise(Groupbyrider, Miles = mean(Miles, na.rm = TRUE))
+
+```
+
+Using the filter function, I only wanted to look at the data when the weather was Sunny. It was interesting because even though the dates for the Sunny observations took place from late November to mid March, there wasn't a huge range in regards to the low and high temperatures. With the arrange function, I arranged the Miles variable in descending order. I noticed that as the number of miles increased, the pace did was well, which I attribute to gaining skill over time while biking. For the select function, I wanted to see a more concise data set, so I just looked at the date, miles, rider, and weather type. For the group by function, I grouped it by the two variables pace and miles . With the mutate function, I made a new variable that was the z-score for miles, so I could see the value's relationship to the mean. 
+
+For summary statistics, I started with the median for miles, which was 32.25 miles. Then, for rides greater than this, I wanted to see the mean pace, which was 12.34 miles. For rides less than the median miles, I wanted to see the standard deviation for the low temperature of that day, which was 8.54. Additionally, I found the quantiles for pace. I then found the minimum miles when the pace was greater than the 75th percentile and found that to be 20.1 miles. 
+
+After grouping the categorical variable, weather, I used the summarize function to find the mean pace for each weather type. The highest mean pace was for rainy weather, which is honestly surprising considering we bike more cautiously when it rains. After grouping the categorical variable, rider, I used the summarize function to find the mean miles for each of us. Despite my friend Alex having less observations in the data set compared to me and Aashna, he still had the highest mean miles out of us three. 
+
+## 4. Visualizing
+
+```{R}
+cormat <- Combined %>% select_if(is.numeric) %>% cor(use = "pair")
+tidycor <- cormat %>% as.data.frame %>% rownames_to_column("var1") %>% pivot_longer(-1, names_to = "var2", values_to = "correlation")
+tidycor %>% ggplot(aes(var1, var2, fill = correlation)) + geom_tile() + scale_fill_gradient2(low = "white", mid = "lightblue", high = "darkblue") + geom_text(aes(label = round(correlation, 2)), color = "white", size = 4) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + coord_fixed() + ggtitle("Correlation Map")
+ggplot(data = Combined, aes(x = Miles, y = High)) + geom_point(size = 3, aes(color = Pace)) + xlab("Miles") + ylab("High Temperature") + labs(color = "Pace") + scale_color_gradient(low = "lightgreen", high = "darkgreen") + ggtitle("Scatterplot")
+ggplot(Combined, aes(x = Weather)) + 
+  geom_bar(aes(y = Miles, fill = ifelse(Low > median(Low), "below median", "above median")), position = "dodge", stat = "summary", fun = mean) + 
+  theme(axis.text.x = element_text(angle = 53, hjust = 1)) + xlab("Weather") + ylab("Mean Miles") +  labs(fill = "Low") + ggtitle("Grouped Barplot")
+```
+
+The correlation heat map shows the correlations between my five numeric variables, and they are all positive. For the low and high temperatures, there's a decently strong correlation, which makes sense because they would increase or decrease together accordingly. Both the time, miles, and pace variable has a low correlation with both high and low temperature, which I think can be attributed to the fact that miles are pretty set in stone regardless of weather and our pace is pretty constant but can still vary. There is a slight correlation between pace and miles, which makes sense because as training progresses, the miles increases as does our pace. There is a very strong correlation between time and miles as the amount of time it takes to bike further will increase. 
+
+The scatter plot shows the relationship between miles, high temperature, and pace. There is a slightly positive correlation with miles and temperatures, which makes sense because biking in warmer weather is overall more enjoyable. Regarding pace, there seem to be darker dots, which indicates a faster pace, when more miles are ridden as well as with higher temperature. I think this could be explained also by the temperature being in the seventies and eighties making it more enjoyable to bike and do so at a quicker pace. 
+
+The third plot is a grouped bar plot that shows the relationship between the weather type, mean miles, and low temperature. The red bar shows the low temperature below the median while the blue bar shows the temperature above the median. When looking at the various weather types, the mean miles below the median low temperature was higher than above the median temperature, which I thought was interesting. The windy weather type especially had a noticeable difference. 
+
+## 5. Dimensionality
+
+```{R}
+library(cluster)
+select(Combined, Pace, Miles, High)
+clust_dat <- select(Combined, Pace, Miles, High)
+sil_width <- vector() 
+for (i in 2:10) { 
+  kms <- kmeans(clust_dat, centers = i) 
+  sil <- silhouette(kms$cluster, dist(clust_dat)) 
+  sil_width[i] <- mean(sil[, 3])}
+ggplot() + geom_line(aes(x = 1:10, y = sil_width)) + scale_x_continuous(name = "k", breaks = 1:10)
+kmeans1 <- clust_dat %>% kmeans(3)
+kmeans1
+kmeansclust <- clust_dat %>% as.data.frame %>% mutate(cluster = as.factor(kmeans1$cluster))
+kmeansclust  
+kmeansclust %>% ggplot(aes(Pace, Miles, High, color = cluster)) + 
+  geom_point()  
+library(GGally)
+ggpairs(kmeansclust, columns = 1:3, aes(color = cluster)) 
+```
+The three numeric variables I selected were pace, miles, and high temperature. I wanted to use three clusters and used the silhouette with indexes running the clusters from 2 to 10 and decided which three clusters I wanted to use. I piped kmeans(3) then used the mutate function back to the original data set. A ggplot was made to make a scatter plot of the clusters with pace as the x variable and miles as the y variable. Next, ggpairs was used to make nine graphs with the three variables. For the scatter plot where pace is the x-axis and high temperature is the y-axis, miles was the variable measured by the scatter plot. The red cluster shows that a higher number miles are seen at the lower side of high temperatures, but not really associated with pace. The blue and green cluster overlap showing that both medium and lower amount of miles are seen with the higher side of high temperatures, but again not really associated with pace. For the graph where miles is the x-axis and high temperature is the y-axis, the clusters represent the pace. The red cluster, which represents a faster pace is closer to the lower side of the high temperature and less miles. The green and blue cluster, which are medium and low pace respectively, are associated with a higher temperature, but the blue cluster is closer to less miles and green is closer to more miles. For the graph with pace as the x-axis and miles as the y-axis, the clusters represent the high temperature of that day. The red and blue clusters, which are higher and lower high temperatures overlap near lower miles, but don't seem to be associated with pace. The green clusters, which represent medium high temperatures are closer to a higher pace and miles. The color filled graphs show the same information, and the three correlation graphs show the correlation between the three variables. 
+

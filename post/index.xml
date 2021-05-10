@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Posts on Project 3</title>
+    <link>/post/</link>
+    <description>Recent content in Posts on Project 3</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language>
+    <lastBuildDate>Sun, 09 May 2021 00:00:00 +0000</lastBuildDate><atom:link href="/post/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>First blog post!</title>
+      <link>/post/2021/05/09/first-blog-post/</link>
+      <pubDate>Sun, 09 May 2021 00:00:00 +0000</pubDate>
+      
+      <guid>/post/2021/05/09/first-blog-post/</guid>
+      <description>This is my first blog post on the website! I’m going to show a few of the python basics that I learned including having R and Python talk to each other with reticulate.
+*When I finally figured out how to insert this meme.
+Built-in Functions print(&amp;quot;hello world&amp;quot;) ## hello world x = list(range(2,9,2)) len(x) ## 4 max(x) ## 8 min(x) ## 2 type(x) ## &amp;lt;class &amp;#39;list&amp;#39;&amp;gt;  Slicing Practice plist=list(range(19)) plist ## [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] plist[4:6] ## [4, 5] plist[::3] ## [0, 3, 6, 9, 12, 15, 18]  Indexing list1=[2,1,19] list2=[&amp;#39;a&amp;#39;,&amp;#39;d&amp;#39;,&amp;#39;d&amp;#39;,&amp;#39;y&amp;#39;] list2[1] ## &amp;#39;d&amp;#39; list1[2] ## 19  Reticulate library(reticulate) Addy &amp;lt;- &amp;quot;Hello&amp;quot; Addy = &amp;quot;World&amp;quot; print(r.</description>
+    </item>
+    
+  </channel>
+</rss>
